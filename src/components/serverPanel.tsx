@@ -5,26 +5,64 @@ import { Text, TextStyle, useWindowDimensions, View, ViewStyle } from 'react-nat
 interface Server {
     name: string
 }
+type picoStyle = {
+    cover: ViewStyle
+    title: TextStyle
+    text: TextStyle
+}
+type Style = {
+    container: ViewStyle
+    title: TextStyle
+    pico: {
+        all: picoStyle
+        green: picoStyle
+        red: picoStyle
+        other: picoStyle
+    }
+}
 
 export function ServerPanel(content: Server) {
     const { width, height } = useWindowDimensions()
-    const wide = Math.min(width, height)
+    const wide = Math.min(width, height) * 0.01
     const currentColors = useTheme().isDark ? Colors.dark : Colors.light;
 
-    const styles: {
-        container: ViewStyle
-        title: TextStyle
-    } = {
+    const styles: Style = {
         container: {
-            width: wide * 0.8,
-            height: wide * 0.6,
-            padding: wide * 0.05,
-            backgroundColor: currentColors.pannel,
-            borderRadius: wide * 0.04,
+            width: wide * 80,
+            height: wide * 60,
+            padding: wide * 5,
+            backgroundColor: currentColors.main.cover,
+            borderRadius: wide * 3,
+            boxShadow: [{
+                offsetX: wide * 2,
+                offsetY: wide * 2,
+                blurRadius: wide * 5,
+                spreadDistance: 0,
+                color: currentColors.main.shadow
+            }]
+        },
+        pico: {
+            // 언젠가 하겠지 (ToDo)
+            // -> 와 잠만 개빡센데
+            all: {
+                cover: {
+                    width: wide * 16,
+                    height: wide * 16,
+                    borderRadius: wide * 3
+                },
+                title: {
+                    fontSize: wide * 3,
+                    fontFamily: 'Pretendard'
+                }
+            },
+            green: {},
+            red: {},
+            other: {}
         },
         title: {
-            fontSize: wide * 0.08,
-            color: currentColors.text
+            fontSize: wide * 8,
+            color: currentColors.main.text,
+            fontFamily: 'Pretendard-Bold',
         }
     }
 

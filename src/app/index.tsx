@@ -27,18 +27,4 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         alignItems: "center",
     },
-    text: {
-        fontSize: 24,
-        fontFamily: "Pretendard-Regular",
-        marginTop: 20,
-    },
-    subText: {
-        fontSize: 16,
-        fontFamily: "Pretendard-Regular",
-        marginTop: 10,
-        marginBottom: 20,
-    },
-    buttonContainer: {
-        marginTop: 10,
-    },
 });
