@@ -15,7 +15,7 @@ export default function Index() {
             ]}
         >
             <ServerPanel
-                name='Server1'
+                server={{ name: "Server1" }}
             />
         </View>
     );

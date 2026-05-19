@@ -2,8 +2,12 @@ import { Colors } from '@/constants/Colors';
 import { useTheme } from '@/hooks/useTheme';
 import { Text, TextStyle, useWindowDimensions, View, ViewStyle } from 'react-native';
 
-interface Server {
+type Server = {
     name: string
+}
+type Pico = {
+    name: string
+    color: "green" | "red" | "sub"
 }
 type picoStyle = {
     cover: ViewStyle
@@ -17,11 +21,11 @@ type Style = {
         all: picoStyle
         green: picoStyle
         red: picoStyle
-        other: picoStyle
+        sub: picoStyle
     }
 }
 
-export function ServerPanel(content: Server) {
+export function ServerPanel({server}: {server: Server}) {
     const { width, height } = useWindowDimensions()
     const wide = Math.min(width, height) * 0.01
     const currentColors = useTheme().isDark ? Colors.dark : Colors.light;
@@ -48,27 +52,71 @@ export function ServerPanel(content: Server) {
                 cover: {
                     width: wide * 16,
                     height: wide * 16,
-                    borderRadius: wide * 3
+                    borderRadius: wide * 3,
+                    padding: wide * 1.5,
                 },
                 title: {
                     fontSize: wide * 3,
-                    fontFamily: 'Pretendard'
+                    fontFamily: 'Pretendard-Medium'
+                },
+                text: {
+                    fontSize: wide * 2.5,
+                    fontFamily: 'Pretendard-Regular'
                 }
             },
-            green: {},
-            red: {},
-            other: {}
+            green: {
+                cover: {
+                    backgroundColor: currentColors.green.cover
+                },
+                title: {
+                    color: currentColors.green.text
+                },
+                text: {
+                    color: currentColors.green.text
+                }
+            },
+            red: {
+                cover: {
+                    backgroundColor: currentColors.red.cover
+                },
+                title: {
+                    color: currentColors.red.text
+                },
+                text: {
+                    color: currentColors.red.text
+                }
+            },
+            sub: {
+                cover: {
+                    backgroundColor: currentColors.sub.cover
+                },
+                title: {
+                    color: currentColors.sub.text
+                },
+                text: {
+                    color: currentColors.sub.text
+                }
+            }
         },
         title: {
             fontSize: wide * 8,
             color: currentColors.main.text,
-            fontFamily: 'Pretendard-Bold',
+            fontFamily: 'Pretendard-SemiBold',
         }
+    }
+
+    function PicoPannel({pico}: {pico: Pico}) {
+        return (<View style={[styles.pico.all.cover, styles.pico[pico.color].cover]}>
+            <Text style={[styles.pico.all.title, styles.pico[pico.color].title]}>{pico.name}</Text>
+        </View>)
     }
 
     return (
         <View style={[styles.container]}>
-            <Text style={[styles.title]}>{content.name}</Text>
+            <Text style={[styles.title]}>{server.name}</Text>
+            <PicoPannel
+                pico={{name: "pico1", color: "green"}}
+            />
         </View>
     )
 }
