@@ -37,22 +37,22 @@ export const Colors = {
             outline: 'rgba(0,0,0,0)'
         },
         green: {
-            cover: 'rgba(16, 185, 129, 0.15)',
+            cover: 'rgba(16,185,129,0.15)',
             text: '#4ADE80',
-            shadow: 'rgba(74, 222, 128, 0.2)',
+            shadow: 'rgba(74,222,128,0.2)',
             outline: 'rgba(74,222,128,0.3)'
         },
         red: {
-            cover: 'rgba(244, 63, 94, 0.15)',
+            cover: 'rgba(244,63,94,0.15)',
             text: '#FB7185',
-            shadow: 'rgba(251, 113, 133, 0.2)',
-            outline: 'rgba(251, 113, 133, 0.3)'
+            shadow: 'rgba(251,113,133,0.2)',
+            outline: 'rgba(251,113,133,0.3)'
         },
         sub: {
-            cover: 'rgba(255, 255, 255, 0.15)',
+            cover: 'rgba(255,255,255,0.15)',
             text: '#94A3B8',
-            shadow: 'rgba(148, 163, 184, 0.3)',
-            outline: 'rgba(148, 163, 184, 0.2)'
+            shadow: 'rgba(148,163,184,0.3)',
+            outline: 'rgba(148,163,184,0.2)'
         },
     },
 };

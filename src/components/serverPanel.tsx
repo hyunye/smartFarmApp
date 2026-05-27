@@ -57,7 +57,7 @@ export function ServerPanel({server}: {server: Server}) {
                 },
                 title: {
                     fontSize: wide * 3,
-                    fontFamily: 'Pretendard-Medium'
+                    fontFamily: 'Pretendard-Medium',
                 },
                 text: {
                     fontSize: wide * 2.5,
@@ -66,7 +66,16 @@ export function ServerPanel({server}: {server: Server}) {
             },
             green: {
                 cover: {
-                    backgroundColor: currentColors.green.cover
+                    backgroundColor: currentColors.green.cover,
+                    borderColor: currentColors.green.outline,
+                    borderWidth: wide * 0.5,
+                    boxShadow: [{
+                        offsetX: 0,
+                        offsetY: 0,
+                        blurRadius: wide * 2,
+                        spreadDistance: 0,
+                        color: currentColors.green.shadow
+                    }]
                 },
                 title: {
                     color: currentColors.green.text
@@ -99,6 +108,7 @@ export function ServerPanel({server}: {server: Server}) {
             }
         },
         title: {
+            marginBottom: wide * 4,
             fontSize: wide * 8,
             color: currentColors.main.text,
             fontFamily: 'Pretendard-SemiBold',
