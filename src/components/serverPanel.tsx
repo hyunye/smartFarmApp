@@ -1,132 +1,156 @@
 import { Colors } from '@/constants/Colors';
 import { useTheme } from '@/hooks/useTheme';
-import { Text, TextStyle, useWindowDimensions, View, ViewStyle } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import React from 'react';
+import { Pressable, Text, useWindowDimensions, View } from 'react-native';
+import Animated, {
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
+} from 'react-native-reanimated';
+
+type PicoStatus = 'on' | 'off' | 'error';
+
+type Pico = {
+    name: string;
+    status: PicoStatus;
+    temp?: number;
+    humidity?: number;
+}
 
 type Server = {
-    name: string
-}
-type Pico = {
-    name: string
-    color: "green" | "red" | "sub"
-}
-type picoStyle = {
-    cover: ViewStyle
-    title: TextStyle
-    text: TextStyle
-}
-type Style = {
-    container: ViewStyle
-    title: TextStyle
-    pico: {
-        all: picoStyle
-        green: picoStyle
-        red: picoStyle
-        sub: picoStyle
-    }
+    name: string;
+    picos?: Pico[];
 }
 
-export function ServerPanel({server}: {server: Server}) {
-    const { width, height } = useWindowDimensions()
-    const wide = Math.min(width, height) * 0.01
-    const currentColors = useTheme().isDark ? Colors.dark : Colors.light;
+function PicoCard({ pico, wide, isDark }: { pico: Pico; wide: number; isDark: boolean }) {
+    const c = isDark ? Colors.dark : Colors.light;
+    const scale = useSharedValue(1);
 
-    const styles: Style = {
-        container: {
-            width: wide * 80,
-            height: wide * 60,
-            padding: wide * 5,
-            backgroundColor: currentColors.main.cover,
-            borderRadius: wide * 3,
-            boxShadow: [{
-                offsetX: wide * 2,
-                offsetY: wide * 2,
-                blurRadius: wide * 5,
-                spreadDistance: 0,
-                color: currentColors.main.shadow
-            }]
-        },
-        pico: {
-            // 언젠가 하겠지 (ToDo)
-            // -> 와 잠만 개빡센데
-            all: {
-                cover: {
-                    width: wide * 16,
-                    height: wide * 16,
-                    borderRadius: wide * 3,
-                    padding: wide * 1.5,
-                },
-                title: {
-                    fontSize: wide * 3,
-                    fontFamily: 'Pretendard-Medium',
-                },
-                text: {
-                    fontSize: wide * 2.5,
-                    fontFamily: 'Pretendard-Regular'
-                }
-            },
-            green: {
-                cover: {
-                    backgroundColor: currentColors.green.cover,
-                    borderColor: currentColors.green.outline,
-                    borderWidth: wide * 0.5,
-                    boxShadow: [{
-                        offsetX: 0,
-                        offsetY: 0,
-                        blurRadius: wide * 2,
-                        spreadDistance: 0,
-                        color: currentColors.green.shadow
-                    }]
-                },
-                title: {
-                    color: currentColors.green.text
-                },
-                text: {
-                    color: currentColors.green.text
-                }
-            },
-            red: {
-                cover: {
-                    backgroundColor: currentColors.red.cover
-                },
-                title: {
-                    color: currentColors.red.text
-                },
-                text: {
-                    color: currentColors.red.text
-                }
-            },
-            sub: {
-                cover: {
-                    backgroundColor: currentColors.sub.cover
-                },
-                title: {
-                    color: currentColors.sub.text
-                },
-                text: {
-                    color: currentColors.sub.text
-                }
-            }
-        },
-        title: {
-            marginBottom: wide * 4,
-            fontSize: wide * 8,
-            color: currentColors.main.text,
-            fontFamily: 'Pretendard-SemiBold',
-        }
-    }
+    const colorKey = pico.status === 'on' ? 'green' : pico.status === 'error' ? 'red' : 'sub';
+    const cardColor = c[colorKey];
 
-    function PicoPannel({pico}: {pico: Pico}) {
-        return (<View style={[styles.pico.all.cover, styles.pico[pico.color].cover]}>
-            <Text style={[styles.pico.all.title, styles.pico[pico.color].title]}>{pico.name}</Text>
-        </View>)
-    }
+    const pressHandler = () => {
+        scale.value = withSpring(0.96, { damping: 15 }, () => {
+            scale.value = withSpring(1, { damping: 15 });
+        });
+    };
+
+    const animStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: scale.value }],
+    }));
+
+    const statusLabel = pico.status === 'on' ? '정상' : pico.status === 'error' ? '오류' : '오프라인';
+    const statusDotColor = pico.status === 'on' ? c.green.text : pico.status === 'error' ? c.red.text : c.sub.text;
 
     return (
-        <View style={[styles.container]}>
-            <Text style={[styles.title]}>{server.name}</Text>
-            <PicoPannel
-                pico={{name: "pico1", color: "green"}}
-            />
+        <Pressable onPress={pressHandler}>
+            <Animated.View style={[animStyle, {
+                width: wide * 42,
+                marginBottom: wide * 3,
+                borderRadius: wide * 3.5,
+                backgroundColor: cardColor.cover,
+                borderWidth: 1,
+                borderColor: cardColor.outline,
+                overflow: 'hidden',
+            }]}>
+                <View style={{ padding: wide * 3 }}>
+                    {/* Header */}
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: wide * 2.5 }}>
+                        <Text style={{ fontFamily: 'Pretendard-Bold', fontSize: wide * 4, color: cardColor.text }}>
+                            {pico.name}
+                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: wide * 1 }}>
+                            <View style={{ width: wide * 1.8, height: wide * 1.8, borderRadius: wide, backgroundColor: statusDotColor }} />
+                            <Text style={{ fontFamily: 'Pretendard-Medium', fontSize: wide * 2.5, color: statusDotColor }}>
+                                {statusLabel}
+                            </Text>
+                        </View>
+                    </View>
+
+                    {/* Sensor values */}
+                    {pico.temp != null && (
+                        <View style={{ flexDirection: 'row', gap: wide * 3 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: wide * 1 }}>
+                                <Ionicons name="thermometer-outline" size={wide * 3.5} color={cardColor.text} />
+                                <Text style={{ fontFamily: 'Pretendard-SemiBold', fontSize: wide * 5, color: cardColor.text }}>
+                                    {pico.temp}°
+                                </Text>
+                            </View>
+                            {pico.humidity != null && (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: wide * 1 }}>
+                                    <Ionicons name="water-outline" size={wide * 3.5} color={cardColor.text} />
+                                    <Text style={{ fontFamily: 'Pretendard-SemiBold', fontSize: wide * 5, color: cardColor.text }}>
+                                        {pico.humidity}%
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+                    )}
+                </View>
+            </Animated.View>
+        </Pressable>
+    );
+}
+
+export function ServerPanel({ server }: { server: Server }) {
+    const { width, height } = useWindowDimensions();
+    const wide = Math.min(width, height) * 0.01;
+    const { isDark } = useTheme();
+    const c = isDark ? Colors.dark : Colors.light;
+
+    const picos: Pico[] = server.picos ?? [
+        { name: 'Pico 1', status: 'on', temp: 24, humidity: 62 },
+        { name: 'Pico 2', status: 'off' },
+    ];
+
+    return (
+        <View style={{
+            width: wide * 90,
+            borderRadius: wide * 5,
+            backgroundColor: c.main.cover,
+            padding: wide * 5,
+            borderWidth: 1,
+            borderColor: c.main.outline,
+            shadowColor: isDark ? c.accent : '#000',
+            shadowOffset: { width: 0, height: wide * 1.5 },
+            shadowOpacity: isDark ? 0.25 : 0.08,
+            shadowRadius: wide * 4,
+            elevation: 8,
+        }}>
+            {/* Server header */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: wide * 5 }}>
+                <View style={{
+                    width: wide * 9,
+                    height: wide * 9,
+                    borderRadius: wide * 2.5,
+                    backgroundColor: isDark ? 'rgba(74,222,128,0.15)' : 'rgba(34,197,94,0.12)',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: wide * 3,
+                }}>
+                    <Ionicons name="server-outline" size={wide * 5} color={c.accent} />
+                </View>
+                <View>
+                    <Text style={{ fontFamily: 'Pretendard-Bold', fontSize: wide * 5, color: c.main.text }}>
+                        {server.name}
+                    </Text>
+                    <Text style={{ fontFamily: 'Pretendard-Regular', fontSize: wide * 2.8, color: c.subText, marginTop: wide * 0.5 }}>
+                        스마트팜 제어 서버
+                    </Text>
+                </View>
+                <View style={{ marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: wide * 1 }}>
+                    <View style={{ width: wide * 1.8, height: wide * 1.8, borderRadius: wide, backgroundColor: c.accent }} />
+                    <Text style={{ fontFamily: 'Pretendard-Medium', fontSize: wide * 2.5, color: c.accent }}>온라인</Text>
+                </View>
+            </View>
+
+            {/* Pico cards */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: wide * 3, justifyContent: 'space-between' }}>
+                {picos.map((pico, i) => (
+                    <PicoCard key={i} pico={pico} wide={wide} isDark={isDark} />
+                ))}
+            </View>
         </View>
-    )
+    );
 }
