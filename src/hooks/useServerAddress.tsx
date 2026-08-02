@@ -11,6 +11,7 @@ interface ServerAddressContextType {
     servers: ServerConfig[];
     updateServerConfig: (id: string, name: string, description: string, address: string) => void;
     addServerConfig: (name: string, description: string, address: string) => void;
+    deleteServerConfig: (id: string) => void;
 }
 
 const ServerAddressContext = createContext<ServerAddressContextType | undefined>(undefined);
@@ -49,8 +50,12 @@ export function ServerAddressProvider({ children }: { children: React.ReactNode 
         ]);
     };
 
+    const deleteServerConfig = (id: string) => {
+        setServers((prev) => prev.filter((srv) => srv.id !== id));
+    };
+
     return (
-        <ServerAddressContext.Provider value={{ servers, updateServerConfig, addServerConfig }}>
+        <ServerAddressContext.Provider value={{ servers, updateServerConfig, addServerConfig, deleteServerConfig }}>
             {children}
         </ServerAddressContext.Provider>
     );

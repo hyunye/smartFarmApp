@@ -4,7 +4,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -26,6 +26,7 @@ interface Server {
     picos: Pico[];
     loading?: boolean;
     error?: boolean;
+    address?: string;
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -103,13 +104,17 @@ function MiniPicoCard({ pico, isServerDark, wide }: { pico: Pico; isServerDark: 
     );
 }
 
-function ServerCard({ server, wide, isDarkTheme }: { server: Server; wide: number; isDarkTheme: boolean }) {
+function ServerCard({ server, wide, isDarkTheme, onConfigure }: {
+    server: Server;
+    wide: number;
+    isDarkTheme: boolean;
+    onConfigure: () => void;
+}) {
     const router = useRouter();
     const scale = useSharedValue(1);
 
     const isDark = isDarkTheme;
 
-    // Premium styling variants
     const cardBg = isDark ? '#111827' : '#FFFFFF';
     const cardBorder = server.error
         ? (isDark ? 'rgba(239, 68, 68, 0.2)' : 'rgba(239, 68, 68, 0.15)')
@@ -178,20 +183,39 @@ function ServerCard({ server, wide, isDarkTheme }: { server: Server; wide: numbe
                         </View>
                     </View>
 
-                    {/* Status pill summary inside server header */}
-                    <View style={{ flexDirection: 'row', gap: wide * 1.5 }}>
-                        <View style={[styles.statusTag, { backgroundColor: isDark ? 'rgba(74,222,128,0.1)' : '#DCFCE7' }]}>
-                            <Text style={{ color: isDark ? '#4ADE80' : '#15803D', fontSize: wide * 2.5, fontFamily: 'Pretendard-Bold' }}>
-                                {statusCounts.normal}
-                            </Text>
-                        </View>
-                        {statusCounts.wrong > 0 && (
-                            <View style={[styles.statusTag, { backgroundColor: isDark ? 'rgba(248,113,113,0.1)' : '#FEE2E2' }]}>
-                                <Text style={{ color: isDark ? '#F87171' : '#B91C1C', fontSize: wide * 2.5, fontFamily: 'Pretendard-Bold' }}>
-                                    {statusCounts.wrong}
+                    {/* Status summary & Configure Action button inside server header */}
+                    <View style={{ flexDirection: 'row', gap: wide * 1.5, alignItems: 'center' }}>
+                        <View style={{ flexDirection: 'row', gap: wide * 1.5 }}>
+                            <View style={[styles.statusTag, { backgroundColor: isDark ? 'rgba(74,222,128,0.1)' : '#DCFCE7' }]}>
+                                <Text style={{ color: isDark ? '#4ADE80' : '#15803D', fontSize: wide * 2.5, fontFamily: 'Pretendard-Bold' }}>
+                                    {statusCounts.normal}
                                 </Text>
                             </View>
-                        )}
+                            {statusCounts.wrong > 0 && (
+                                <View style={[styles.statusTag, { backgroundColor: isDark ? 'rgba(248,113,113,0.1)' : '#FEE2E2' }]}>
+                                    <Text style={{ color: isDark ? '#F87171' : '#B91C1C', fontSize: wide * 2.5, fontFamily: 'Pretendard-Bold' }}>
+                                        {statusCounts.wrong}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+
+                        <Pressable
+                            onPress={(e) => {
+                                e.stopPropagation();
+                                onConfigure();
+                            }}
+                            style={({ pressed }) => [
+                                styles.gearBtn,
+                                {
+                                    backgroundColor: pressed
+                                        ? (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)')
+                                        : 'transparent',
+                                }
+                            ]}
+                        >
+                            <Ionicons name="cog-outline" size={wide * 5.2} color={isDark ? '#94A3B8' : '#64748B'} />
+                        </Pressable>
                     </View>
                 </View>
 
@@ -231,10 +255,22 @@ export default function Index() {
     const c = isDark ? Colors.dark : Colors.light;
     const router = useRouter();
 
-    const { servers } = useServerAddress();
+    const { servers, addServerConfig, updateServerConfig, deleteServerConfig } = useServerAddress();
     const [fetchedServers, setFetchedServers] = useState<Server[]>([]);
     const [refreshing, setRefreshing] = useState(false);
     const [loading, setLoading] = useState(true);
+
+    // Modal states
+    const [addModalOpen, setAddModalOpen] = useState(false);
+    const [newName, setNewName] = useState('');
+    const [newDesc, setNewDesc] = useState('');
+    const [newAddr, setNewAddr] = useState('');
+
+    const [editModalOpen, setEditModalOpen] = useState(false);
+    const [editingServerId, setEditingServerId] = useState<string | null>(null);
+    const [editName, setEditName] = useState('');
+    const [editDesc, setEditDesc] = useState('');
+    const [editAddr, setEditAddr] = useState('');
 
     const loadData = useCallback(async () => {
         const loaded: Server[] = await Promise.all(
@@ -247,7 +283,6 @@ export default function Index() {
                     if (!res.ok) throw new Error('Network error');
                     const data = await res.json();
 
-                    // Respond: { state: number, pico: PicoType[] }
                     const picosList: Pico[] = (data.pico || []).map((p: any) => {
                         let status: PicoStatus = 'normal';
                         if (!p.connected) {
@@ -270,9 +305,9 @@ export default function Index() {
                         location: srv.description,
                         picos: picosList,
                         error: false,
+                        address: srv.address,
                     };
                 } catch (e) {
-                    // Fallback configuration if request fails
                     const fallbackPicos: Pico[] = srv.id === 'Server1' ? [
                         { name: 'pico1', temp: 22, humidity: 48, activeTime: '450 lx', status: 'normal' },
                         { name: 'pico2', temp: 29, humidity: 32, activeTime: '200 lx', status: 'wrong' },
@@ -296,6 +331,7 @@ export default function Index() {
                         location: srv.description,
                         picos: fallbackPicos,
                         error: true,
+                        address: srv.address,
                     };
                 }
             })
@@ -314,96 +350,252 @@ export default function Index() {
         loadData();
     };
 
+    const handleAddServer = () => {
+        if (!newName || !newAddr) return;
+        const cleanedAddress = newAddr.trim().replace(/\/$/, '');
+        addServerConfig(newName.trim(), newDesc.trim() || '위치 설명 없음', cleanedAddress);
+
+        // Reset and close
+        setNewName('');
+        setNewDesc('');
+        setNewAddr('');
+        setAddModalOpen(false);
+    };
+
+    const handleOpenEdit = (server: Server) => {
+        setEditingServerId(server.id);
+        setEditName(server.name);
+        setEditDesc(server.location);
+        setEditAddr(server.address || '');
+        setEditModalOpen(true);
+    };
+
+    const handleSaveEdit = () => {
+        if (!editingServerId || !editName || !editAddr) return;
+        const cleanedAddress = editAddr.trim().replace(/\/$/, '');
+        updateServerConfig(editingServerId, editName.trim(), editDesc.trim(), cleanedAddress);
+        setEditModalOpen(false);
+    };
+
+    const handleDeleteServer = () => {
+        if (!editingServerId) return;
+        deleteServerConfig(editingServerId);
+        setEditModalOpen(false);
+    };
+
     // Summary calculation
     const totalPicos = fetchedServers.reduce((acc, s) => acc + s.picos.length, 0);
     const wrongPicos = fetchedServers.reduce((acc, s) => acc + s.picos.filter(p => p.status === 'wrong').length, 0);
     const offlineServers = fetchedServers.filter(s => s.error).length;
 
     return (
-        <ScrollView
-            style={[styles.scroll, { backgroundColor: c.background }]}
-            contentContainerStyle={{ paddingBottom: wide * 26, paddingTop: wide * 6 }}
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={c.accent} colors={[c.accent]} />
-            }
-        >
-            {/* Custom Premium Header */}
-            <View style={[styles.header, { paddingHorizontal: wide * 6, marginBottom: wide * 3 }]}>
-                <View style={[styles.headerIconContainer, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : '#FFFFFF' }]}>
-                    <Ionicons name="leaf" size={wide * 5} color={c.accent} />
-                </View>
-                <View style={{ flex: 1 }} />
-                <Pressable
-                    onPress={() => router.push('/settings')}
-                    style={[styles.headerIconContainer, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : '#FFFFFF' }]}
-                >
-                    <Ionicons name="settings-sharp" size={wide * 5} color={c.main.text} />
-                </Pressable>
-            </View>
-
-            {/* Dashboard greeting title */}
-            <View style={{ paddingHorizontal: wide * 6, marginBottom: wide * 5 }}>
-                <Text style={{ fontFamily: 'Pretendard-Bold', fontSize: wide * 7, color: c.main.text }}>
-                    스마트팜 허브
-                </Text>
-
-                {/* Stats Summary Panel */}
-                <View style={[
-                    styles.summaryContainer,
-                    {
-                        backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : '#FFFFFF',
-                        borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
-                        padding: wide * 3.5,
-                        borderRadius: wide * 4,
-                        marginTop: wide * 3,
-                    }
-                ]}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: wide * 2 }}>
-                            <View style={[styles.statusDot, { backgroundColor: offlineServers > 0 ? '#F87171' : (wrongPicos > 0 ? '#FB7185' : c.accent) }]} />
-                            <Text style={{ fontSize: wide * 3.2, fontFamily: 'Pretendard-Medium', color: c.main.text, marginLeft: wide * 2, flex: 1 }} numberOfLines={1}>
-                                {offlineServers > 0
-                                    ? `${offlineServers}개의 서버가 오프라인 상태입니다`
-                                    : (wrongPicos > 0 ? `${wrongPicos}개의 경고 상태 확인 됨` : '모든 온실 시스템이 안정적입니다')}
-                            </Text>
-                        </View>
-                        <Text style={{ fontSize: wide * 2.8, fontFamily: 'Pretendard-Regular', color: c.subText }}>
-                            디바이스 {totalPicos}개
-                        </Text>
+        <View style={{ flex: 1, backgroundColor: c.background }}>
+            <ScrollView
+                style={[styles.scroll, { backgroundColor: c.background }]}
+                contentContainerStyle={{ paddingBottom: wide * 26, paddingTop: wide * 6 }}
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={c.accent} colors={[c.accent]} />
+                }
+            >
+                {/* Custom Premium Header */}
+                <View style={[styles.header, { paddingHorizontal: wide * 6, marginBottom: wide * 3 }]}>
+                    <View style={[styles.headerIconContainer, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : '#FFFFFF' }]}>
+                        <Ionicons name="leaf" size={wide * 5} color={c.accent} />
                     </View>
-                </View>
-            </View>
-
-            {/* Server Card List */}
-            {loading ? (
-                <View style={[styles.centerAlign, { marginTop: wide * 10 }]}>
-                    <ActivityIndicator size="large" color={c.accent} />
-                </View>
-            ) : (
-                <View style={{ paddingHorizontal: wide * 6, gap: wide * 5.5 }}>
-                    {fetchedServers.map((server) => (
-                        <ServerCard key={server.id} server={server} wide={wide} isDarkTheme={isDark} />
-                    ))}
-
-                    {/* Add new server card at bottom */}
-                    <Pressable style={[
-                        styles.addServerCard,
-                        {
-                            borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)',
-                            backgroundColor: isDark ? 'rgba(255, 255, 255, 0.01)' : 'rgba(0, 0, 0, 0.005)',
-                            height: wide * 28,
-                            borderRadius: wide * 5,
-                        }
-                    ]}>
-                        <Ionicons name="add-circle" size={wide * 8} color={isDark ? 'rgba(255,255,255,0.15)' : '#94A3B8'} style={{ marginBottom: wide * 1 }} />
-                        <Text style={{ fontFamily: 'Pretendard-Medium', fontSize: wide * 3, color: isDark ? '#475569' : '#94A3B8' }}>
-                            새 온실 서버 추가
-                        </Text>
+                    <View style={{ flex: 1 }} />
+                    <Pressable
+                        onPress={() => router.push('/settings')}
+                        style={[styles.headerIconContainer, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : '#FFFFFF' }]}
+                    >
+                        <Ionicons name="settings-sharp" size={wide * 5} color={c.main.text} />
                     </Pressable>
                 </View>
-            )}
-        </ScrollView>
+
+                {/* Dashboard greeting title */}
+                <View style={{ paddingHorizontal: wide * 6, marginBottom: wide * 5 }}>
+                    <Text style={{ fontFamily: 'Pretendard-Bold', fontSize: wide * 7, color: c.main.text }}>
+                        스마트팜 허브
+                    </Text>
+
+                    {/* Stats Summary Panel */}
+                    <View style={[
+                        styles.summaryContainer,
+                        {
+                            backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : '#FFFFFF',
+                            borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+                            padding: wide * 3.5,
+                            borderRadius: wide * 4,
+                            marginTop: wide * 3,
+                        }
+                    ]}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: wide * 2 }}>
+                                <View style={[styles.statusDot, { backgroundColor: offlineServers > 0 ? '#F87171' : (wrongPicos > 0 ? '#FB7185' : c.accent) }]} />
+                                <Text style={{ fontSize: wide * 3.2, fontFamily: 'Pretendard-Medium', color: c.main.text, marginLeft: wide * 2, flex: 1 }} numberOfLines={1}>
+                                    {offlineServers > 0
+                                        ? `${offlineServers}개의 서버가 오프라인 상태입니다`
+                                        : (wrongPicos > 0 ? `${wrongPicos}개의 경고 상태 확인 됨` : '모든 온실 시스템이 안정적입니다')}
+                                </Text>
+                            </View>
+                            <Text style={{ fontSize: wide * 2.8, fontFamily: 'Pretendard-Regular', color: c.subText }}>
+                                디바이스 {totalPicos}개
+                            </Text>
+                        </View>
+                    </View>
+                </View>
+
+                {/* Server Card List */}
+                {loading ? (
+                    <View style={[styles.centerAlign, { marginTop: wide * 10 }]}>
+                        <ActivityIndicator size="large" color={c.accent} />
+                    </View>
+                ) : (
+                    <View style={{ paddingHorizontal: wide * 6, gap: wide * 5.5 }}>
+                        {fetchedServers.map((server) => (
+                            <ServerCard
+                                key={server.id}
+                                server={server}
+                                wide={wide}
+                                isDarkTheme={isDark}
+                                onConfigure={() => handleOpenEdit(server)}
+                            />
+                        ))}
+
+                        {/* Add new server card at bottom */}
+                        <Pressable
+                            onPress={() => setAddModalOpen(true)}
+                            style={[
+                                styles.addServerCard,
+                                {
+                                    borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)',
+                                    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.01)' : 'rgba(0, 0, 0, 0.005)',
+                                    height: wide * 28,
+                                    borderRadius: wide * 5,
+                                }
+                            ]}
+                        >
+                            <Ionicons name="add-circle" size={wide * 8} color={isDark ? 'rgba(255,255,255,0.15)' : '#94A3B8'} style={{ marginBottom: wide * 1 }} />
+                            <Text style={{ fontFamily: 'Pretendard-Medium', fontSize: wide * 3, color: isDark ? '#475569' : '#94A3B8' }}>
+                                새 온실 서버 추가
+                            </Text>
+                        </Pressable>
+                    </View>
+                )}
+            </ScrollView>
+
+            {/* ─── ADD SERVER MODAL ─── */}
+            <Modal visible={addModalOpen} transparent={true} animationType="fade" onRequestClose={() => setAddModalOpen(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalContent, { backgroundColor: isDark ? '#1F2937' : '#FFFFFF', borderColor: c.main.outline }]}>
+                        <Text style={[styles.modalTitle, { color: c.main.text }]}>새 온실 서버 추가</Text>
+
+                        <View style={styles.modalField}>
+                            <Text style={[styles.modalLabel, { color: c.subText }]}>서버 이름 *</Text>
+                            <TextInput
+                                style={[styles.modalInput, { color: c.main.text, borderColor: c.main.outline }]}
+                                placeholder="예: Server3"
+                                placeholderTextColor={c.subText}
+                                value={newName}
+                                onChangeText={setNewName}
+                            />
+                        </View>
+
+                        <View style={styles.modalField}>
+                            <Text style={[styles.modalLabel, { color: c.subText }]}>설명/위치</Text>
+                            <TextInput
+                                style={[styles.modalInput, { color: c.main.text, borderColor: c.main.outline }]}
+                                placeholder="예: 온실 B동"
+                                placeholderTextColor={c.subText}
+                                value={newDesc}
+                                onChangeText={setNewDesc}
+                            />
+                        </View>
+
+                        <View style={styles.modalField}>
+                            <Text style={[styles.modalLabel, { color: c.subText }]}>서버 IP/링크 *</Text>
+                            <TextInput
+                                style={[styles.modalInput, { color: c.main.text, borderColor: c.main.outline }]}
+                                placeholder="예: http://192.168.0.12"
+                                placeholderTextColor={c.subText}
+                                autoCapitalize="none"
+                                value={newAddr}
+                                onChangeText={setNewAddr}
+                            />
+                        </View>
+
+                        <View style={styles.modalActions}>
+                            <Pressable onPress={() => setAddModalOpen(false)} style={[styles.modalBtn, styles.cancelBtn, { borderColor: c.main.outline }]}>
+                                <Text style={{ color: c.subText, fontFamily: 'Pretendard-SemiBold' }}>취소</Text>
+                            </Pressable>
+                            <Pressable onPress={handleAddServer} style={[styles.modalBtn, { backgroundColor: c.accent }]}>
+                                <Text style={{ color: '#FFFFFF', fontFamily: 'Pretendard-SemiBold' }}>추가</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* ─── EDIT SERVER MODAL ─── */}
+            <Modal visible={editModalOpen} transparent={true} animationType="fade" onRequestClose={() => setEditModalOpen(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalContent, { backgroundColor: isDark ? '#1F2937' : '#FFFFFF', borderColor: c.main.outline }]}>
+                        <Text style={[styles.modalTitle, { color: c.main.text }]}>서버 구성 설정</Text>
+
+                        <View style={styles.modalField}>
+                            <Text style={[styles.modalLabel, { color: c.subText }]}>서버 이름 *</Text>
+                            <TextInput
+                                style={[styles.modalInput, { color: c.main.text, borderColor: c.main.outline }]}
+                                placeholder="이름"
+                                placeholderTextColor={c.subText}
+                                value={editName}
+                                onChangeText={setEditName}
+                            />
+                        </View>
+
+                        <View style={styles.modalField}>
+                            <Text style={[styles.modalLabel, { color: c.subText }]}>설명/위치</Text>
+                            <TextInput
+                                style={[styles.modalInput, { color: c.main.text, borderColor: c.main.outline }]}
+                                placeholder="설명"
+                                placeholderTextColor={c.subText}
+                                value={editDesc}
+                                onChangeText={setEditDesc}
+                            />
+                        </View>
+
+                        <View style={styles.modalField}>
+                            <Text style={[styles.modalLabel, { color: c.subText }]}>서버 IP/링크 *</Text>
+                            <TextInput
+                                style={[styles.modalInput, { color: c.main.text, borderColor: c.main.outline }]}
+                                placeholder="주소"
+                                placeholderTextColor={c.subText}
+                                autoCapitalize="none"
+                                value={editAddr}
+                                onChangeText={setEditAddr}
+                            />
+                        </View>
+
+                        <View style={styles.modalActions}>
+                            <Pressable onPress={handleDeleteServer} style={[styles.modalBtn, { backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: '#EF4444', borderWidth: 1 }]}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                                    <Ionicons name="trash-outline" size={16} color="#EF4444" style={{ top: -0.5 }} />
+                                    <Text style={{ color: '#EF4444', fontFamily: 'Pretendard-SemiBold' }}>삭제</Text>
+                                </View>
+                            </Pressable>
+
+                            <Pressable onPress={() => setEditModalOpen(false)} style={[styles.modalBtn, styles.cancelBtn, { borderColor: c.main.outline }]}>
+                                <Text style={{ color: c.subText, fontFamily: 'Pretendard-SemiBold' }}>취소</Text>
+                            </Pressable>
+
+                            <Pressable onPress={handleSaveEdit} style={[styles.modalBtn, { backgroundColor: c.accent }]}>
+                                <Text style={{ color: '#FFFFFF', fontFamily: 'Pretendard-SemiBold' }}>저장</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+        </View>
     );
 }
 
@@ -484,5 +676,69 @@ const styles = StyleSheet.create({
         paddingHorizontal: 6,
         paddingVertical: 2,
         marginLeft: 8,
+    },
+    gearBtn: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginLeft: 6,
+    },
+    // Modal Styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    modalContent: {
+        width: '100%',
+        maxWidth: 420,
+        borderRadius: 20,
+        borderWidth: 1,
+        padding: 24,
+        gap: 16,
+        shadowColor: '#000',
+        shadowOpacity: 0.15,
+        shadowRadius: 10,
+        elevation: 10,
+    },
+    modalTitle: {
+        fontFamily: 'Pretendard-Bold',
+        fontSize: 20,
+        marginBottom: 8,
+    },
+    modalField: {
+        gap: 6,
+    },
+    modalLabel: {
+        fontFamily: 'Pretendard-Medium',
+        fontSize: 13,
+    },
+    modalInput: {
+        borderWidth: 1,
+        borderRadius: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        fontFamily: 'Pretendard-Medium',
+        fontSize: 14,
+    },
+    modalActions: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: 12,
+        gap: 12,
+    },
+    modalBtn: {
+        flex: 1,
+        height: 48,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    cancelBtn: {
+        borderWidth: 1,
     },
 });
