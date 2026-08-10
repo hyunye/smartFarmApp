@@ -87,9 +87,17 @@ function MiniPicoCard({ pico, isServerDark, wide }: { pico: Pico; isServerDark: 
                         <Ionicons name="water-outline" size={wide * 2.4} color={iconColor} />
                         <Text style={[styles.miniPicoTxt, { color: textColor, fontSize: wide * 2.2 }]}>{pico.humidity}%</Text>
                     </View>
-                    <View style={styles.miniValRow}>
-                        <Ionicons name="sunny-outline" size={wide * 2.4} color={iconColor} />
-                        <Text style={[styles.miniPicoTxt, { color: textColor, fontSize: wide * 2.2 }]} numberOfLines={1}>{pico.activeTime}</Text>
+                    <View style={[styles.miniValRow, {
+                        backgroundColor: isServerDark ? 'rgba(251, 191, 36, 0.15)' : 'rgba(217, 119, 6, 0.1)',
+                        borderRadius: wide * 1,
+                        paddingHorizontal: wide * 0.8,
+                        paddingVertical: wide * 0.2,
+                        marginTop: wide * 0.2,
+                    }]}>
+                        <Ionicons name="sunny" size={wide * 2.4} color={isServerDark ? '#FBBF24' : '#D97706'} />
+                        <Text style={[styles.miniPicoTxt, { color: isServerDark ? '#FBBF24' : '#D97706', fontSize: wide * 2.2, fontFamily: 'Pretendard-Bold' }]} numberOfLines={1}>
+                            {pico.activeTime}
+                        </Text>
                     </View>
                 </View>
             ) : (
@@ -307,29 +315,13 @@ export default function Index() {
                         error: false,
                         address: srv.address,
                     };
-                } catch (e) {
-                    const fallbackPicos: Pico[] = srv.id === 'Server1' ? [
-                        { name: 'pico1', temp: 22, humidity: 48, activeTime: '450 lx', status: 'normal' },
-                        { name: 'pico2', temp: 29, humidity: 32, activeTime: '200 lx', status: 'wrong' },
-                        { name: 'pico3', temp: 21, humidity: 55, activeTime: '420 lx', status: 'normal' },
-                        { name: 'pico4', temp: 31, humidity: 28, activeTime: '600 lx', status: 'wrong' },
-                        { name: 'pico5', temp: 30, humidity: 29, activeTime: '290 lx', status: 'wrong' },
-                        { name: 'pico6', temp: 23, humidity: 50, activeTime: '440 lx', status: 'normal' },
-                        { name: 'pico7', status: 'disconnected' },
-                    ] : [
-                        { name: 'pico1', temp: 19, humidity: 62, activeTime: '410 lx', status: 'normal' },
-                        { name: 'pico2', temp: 28, humidity: 40, activeTime: '380 lx', status: 'wrong' },
-                        { name: 'pico3', temp: 18, humidity: 65, activeTime: '400 lx', status: 'normal' },
-                        { name: 'pico4', temp: 19, humidity: 61, activeTime: '420 lx', status: 'normal' },
-                        { name: 'pico5', temp: 29, humidity: 38, activeTime: '390 lx', status: 'wrong' },
-                        { name: 'pico6', temp: 20, humidity: 63, activeTime: '430 lx', status: 'normal' },
-                        { name: 'pico7', status: 'disconnected' },
-                    ];
+                } catch {
                     return {
                         id: srv.id,
                         name: srv.name,
                         location: srv.description,
-                        picos: fallbackPicos,
+                        // Never display fabricated sensor data as though it were live.
+                        picos: [],
                         error: true,
                         address: srv.address,
                     };

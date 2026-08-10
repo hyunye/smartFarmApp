@@ -27,7 +27,7 @@ function SettingRow({
     const opacity = useSharedValue(0);
     useEffect(() => {
         opacity.value = withTiming(1, { duration: 250 });
-    }, []);
+    }, [opacity]);
     const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
 
     return (
@@ -176,7 +176,7 @@ export default function Settings() {
     const [autoLight, setAutoLight] = useState(false);
 
     const titleOpacity = useSharedValue(0);
-    useEffect(() => { titleOpacity.value = withTiming(1, { duration: 500 }); }, []);
+    useEffect(() => { titleOpacity.value = withTiming(1, { duration: 500 }); }, [titleOpacity]);
     const titleStyle = useAnimatedStyle(() => ({ opacity: titleOpacity.value }));
 
     const handleServerSave = (id: string, name: string, description: string, address: string) => {

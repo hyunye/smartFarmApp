@@ -12,6 +12,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-na
 type PicoStatus = 'normal' | 'wrong' | 'disconnected';
 
 interface Pico {
+    id?: string;
     name: string;
     temp?: number;
     tempMax?: number;
@@ -55,6 +56,7 @@ function normalizePico(raw: PicoType): Pico {
     }
 
     return {
+        id: raw.id,
         name: raw.name || raw.id,
         temp: raw.state.temperature,
         tempMax: 35,
@@ -68,15 +70,16 @@ function normalizePico(raw: PicoType): Pico {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function GaugeBar({ label, value, max, color, wide, isDark }: {
-    label: string; value: number; max: number; color: string; wide: number; isDark: boolean;
+function GaugeBar({ label, value, max, color, wide, isDark, unit }: {
+    label: string; value: number; max: number; color: string; wide: number; isDark: boolean; unit?: string;
 }) {
     const pct = Math.min(Math.max((value / max) * 100, 0), 100);
+    const displayUnit = unit || (label === '온도' ? '°C' : label === '습도' ? '%' : ' lx');
     return (
-        <View style={{ marginBottom: wide * 2 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: wide * 0.8 }}>
+        <View style={{ marginBottom: wide * 1.8 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: wide * 0.6 }}>
                 <Text style={{ fontSize: wide * 2.8, fontFamily: 'Pretendard-Regular', color: isDark ? '#94A3B8' : '#64748B' }}>{label}</Text>
-                <Text style={{ fontSize: wide * 2.8, fontFamily: 'Pretendard-Bold', color }}>{value}{label === '온도' ? '°C' : '%'}</Text>
+                <Text style={{ fontSize: wide * 2.8, fontFamily: 'Pretendard-Bold', color }}>{value}{displayUnit}</Text>
             </View>
             <View style={[styles.gaugeTrack, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }]}>
                 <View style={[styles.gaugeFill, { width: `${pct}%`, backgroundColor: color }]} />
@@ -85,20 +88,15 @@ function GaugeBar({ label, value, max, color, wide, isDark }: {
     );
 }
 
-function LargePicoCard({ pico: initialPico, wide, isDark }: { pico: Pico; wide: number; isDark: boolean }) {
+function LargePicoCard({ pico, wide, isDark, onToggleWatering }: { pico: Pico; wide: number; isDark: boolean; onToggleWatering: (pico: Pico) => void }) {
     const c = isDark ? Colors.dark : Colors.light;
     const scale = useSharedValue(1);
-    const [pico, setPico] = useState<Pico>(initialPico);
-
-    useEffect(() => { setPico(initialPico); }, [initialPico]);
 
     const pressHandler = () => {
         scale.value = withSpring(0.97, { damping: 15 }, () => {
             scale.value = withSpring(1, { damping: 15 });
         });
     };
-
-    const toggleWatering = () => setPico(p => ({ ...p, watering: !p.watering }));
 
     const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
@@ -107,6 +105,7 @@ function LargePicoCard({ pico: initialPico, wide, isDark }: { pico: Pico; wide: 
     let badgeBg = '', badgeText = '', badgeLabel = '';
     let tempColor = isDark ? '#60A5FA' : '#3B82F6';
     let humidColor = isDark ? '#4ADE80' : '#22C55E';
+    let lightColor = isDark ? '#FBBF24' : '#D97706';
 
     if (pico.status === 'normal') {
         badgeBg = isDark ? 'rgba(74,222,128,0.1)' : '#DCFCE7';
@@ -123,11 +122,13 @@ function LargePicoCard({ pico: initialPico, wide, isDark }: { pico: Pico; wide: 
         badgeLabel = '비활성';
     }
 
+    const lightVal = pico.activeTime ? parseInt(pico.activeTime.replace(/[^0-9]/g, '')) || 0 : 0;
+
     return (
         <Pressable onPress={pressHandler} style={{ width: '48%', marginBottom: wide * 4 }}>
             <Animated.View style={[animStyle, styles.largePico, {
                 backgroundColor: cardBg, borderColor, borderRadius: wide * 4.5,
-                padding: wide * 4, borderWidth: 1, minHeight: wide * 48,
+                padding: wide * 4, borderWidth: 1, minHeight: wide * 52,
                 shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: wide * 2, elevation: 1.5,
             }]}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: wide * 3.5 }}>
@@ -141,12 +142,20 @@ function LargePicoCard({ pico: initialPico, wide, isDark }: { pico: Pico; wide: 
                     <View style={{ flex: 1 }}>
                         <GaugeBar label="온도" value={pico.temp} max={pico.tempMax || 35} color={tempColor} wide={wide} isDark={isDark} />
                         <GaugeBar label="습도" value={pico.humidity} max={pico.humidityMax || 100} color={humidColor} wide={wide} isDark={isDark} />
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: wide * 2, paddingTop: wide * 2, borderTopWidth: 1, borderTopColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <Ionicons name="sunny-outline" size={wide * 3} color={isDark ? '#64748B' : '#94A3B8'} />
-                                <Text style={{ fontSize: wide * 2.4, fontFamily: 'Pretendard-Regular', color: isDark ? '#64748B' : '#64748B', marginLeft: wide * 1 }}>{pico.activeTime}</Text>
+                        <GaugeBar label="조도" value={lightVal} max={1000} color={lightColor} wide={wide} isDark={isDark} unit=" lx" />
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: wide * 1.5, paddingTop: wide * 2, borderTopWidth: 1, borderTopColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }}>
+                            <View style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                backgroundColor: isDark ? 'rgba(251, 191, 36, 0.12)' : 'rgba(217, 119, 6, 0.08)',
+                                paddingHorizontal: wide * 2,
+                                paddingVertical: wide * 1,
+                                borderRadius: wide * 2,
+                            }}>
+                                <Ionicons name="sunny" size={wide * 3.2} color={lightColor} />
+                                <Text style={{ fontSize: wide * 2.6, fontFamily: 'Pretendard-Bold', color: lightColor, marginLeft: wide * 1 }}>{pico.activeTime}</Text>
                             </View>
-                            <Pressable onPress={toggleWatering} style={[styles.waterBtn, {
+                            <Pressable onPress={() => onToggleWatering(pico)} style={[styles.waterBtn, {
                                 backgroundColor: pico.watering ? (isDark ? 'rgba(96,165,250,0.15)' : 'rgba(59,130,246,0.15)') : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)'),
                                 borderColor: pico.watering ? (isDark ? '#60A5FA' : '#3B82F6') : 'transparent',
                                 borderWidth: 1,
@@ -190,6 +199,25 @@ export default function ServerDetail() {
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const toggleWatering = async (pico: Pico) => {
+        if (!serverConfig) return;
+        const baseUrl = serverConfig.address.startsWith('http') ? serverConfig.address : `http://${serverConfig.address}`;
+        try {
+            const response = await fetch(`${baseUrl}/picos/${pico.id}/commands`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': process.env.EXPO_PUBLIC_SMARTFARM_API_KEY ?? '',
+                },
+                body: JSON.stringify({ command: 'water', enabled: !pico.watering, durationSeconds: !pico.watering ? 30 : undefined }),
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            setPicos(current => current.map(item => item.id === pico.id ? { ...item, watering: !pico.watering } : item));
+        } catch (cause: any) {
+            setError(cause?.message ?? '관수 명령을 전송하지 못했습니다.');
+        }
+    };
+
     const fetchState = useCallback(async () => {
         if (!serverConfig) return;
         try {
@@ -221,7 +249,9 @@ export default function ServerDetail() {
                 { name: 'pico6', temp: 20, humidity: 63, activeTime: '430 lx', status: 'normal', watering: false },
                 { name: 'pico7', status: 'disconnected' },
             ];
-            setPicos(mockPicos);
+            void mockPicos;
+            // Do not present sample values as live sensor measurements.
+            setPicos([]);
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -330,7 +360,7 @@ export default function ServerDetail() {
                         {/* Pico Cards Grid */}
                         <View style={styles.gridContainer}>
                             {filteredPicos.map((pico, idx) => (
-                                <LargePicoCard key={idx} pico={pico} wide={wide} isDark={isDark} />
+                                <LargePicoCard key={idx} pico={pico} wide={wide} isDark={isDark} onToggleWatering={toggleWatering} />
                             ))}
                             {/* Add pico card */}
                             <Pressable style={{ width: '48%' }}>
