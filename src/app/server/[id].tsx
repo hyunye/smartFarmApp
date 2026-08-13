@@ -20,7 +20,6 @@ interface Pico {
     humidityMax?: number;
     activeTime?: string;
     status: PicoStatus;
-    watering?: boolean;
 }
 
 type FilterType = 'normal' | 'all' | 'wrong';
@@ -64,7 +63,6 @@ function normalizePico(raw: PicoType): Pico {
         humidityMax: 100,
         activeTime: `${raw.state.light} lx`,
         status,
-        watering: false,
     };
 }
 
@@ -88,7 +86,7 @@ function GaugeBar({ label, value, max, color, wide, isDark, unit }: {
     );
 }
 
-function LargePicoCard({ pico, wide, isDark, onToggleWatering }: { pico: Pico; wide: number; isDark: boolean; onToggleWatering: (pico: Pico) => void }) {
+function LargePicoCard({ pico, wide, isDark }: { pico: Pico; wide: number; isDark: boolean }) {
     const c = isDark ? Colors.dark : Colors.light;
     const scale = useSharedValue(1);
 
@@ -155,14 +153,6 @@ function LargePicoCard({ pico, wide, isDark, onToggleWatering }: { pico: Pico; w
                                 <Ionicons name="sunny" size={wide * 3.2} color={lightColor} />
                                 <Text style={{ fontSize: wide * 2.6, fontFamily: 'Pretendard-Bold', color: lightColor, marginLeft: wide * 1 }}>{pico.activeTime}</Text>
                             </View>
-                            <Pressable onPress={() => onToggleWatering(pico)} style={[styles.waterBtn, {
-                                backgroundColor: pico.watering ? (isDark ? 'rgba(96,165,250,0.15)' : 'rgba(59,130,246,0.15)') : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)'),
-                                borderColor: pico.watering ? (isDark ? '#60A5FA' : '#3B82F6') : 'transparent',
-                                borderWidth: 1,
-                            }]}>
-                                <Ionicons name={pico.watering ? 'water' : 'water-outline'} size={wide * 3.8}
-                                    color={pico.watering ? (isDark ? '#60A5FA' : '#2563EB') : (isDark ? '#94A3B8' : '#64748B')} />
-                            </Pressable>
                         </View>
                     </View>
                 ) : (
@@ -199,25 +189,6 @@ export default function ServerDetail() {
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const toggleWatering = async (pico: Pico) => {
-        if (!serverConfig) return;
-        const baseUrl = serverConfig.address.startsWith('http') ? serverConfig.address : `http://${serverConfig.address}`;
-        try {
-            const response = await fetch(`${baseUrl}/picos/${pico.id}/commands`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-API-Key': process.env.EXPO_PUBLIC_SMARTFARM_API_KEY ?? '',
-                },
-                body: JSON.stringify({ command: 'water', enabled: !pico.watering, durationSeconds: !pico.watering ? 30 : undefined }),
-            });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            setPicos(current => current.map(item => item.id === pico.id ? { ...item, watering: !pico.watering } : item));
-        } catch (cause: any) {
-            setError(cause?.message ?? '관수 명령을 전송하지 못했습니다.');
-        }
-    };
-
     const fetchState = useCallback(async () => {
         if (!serverConfig) return;
         try {
@@ -231,25 +202,6 @@ export default function ServerDetail() {
             setPicos((json.pico ?? []).map(normalizePico));
         } catch (e: any) {
             setError(e?.message ?? '서버 연결에 실패했습니다');
-            // Fallback mock data inside details if request fails
-            const mockPicos: Pico[] = serverConfig.id === 'Server1' ? [
-                { name: 'pico1', temp: 22, humidity: 48, activeTime: '450 lx', status: 'normal', watering: false },
-                { name: 'pico2', temp: 29, humidity: 32, activeTime: '200 lx', status: 'wrong', watering: true },
-                { name: 'pico3', temp: 21, humidity: 55, activeTime: '420 lx', status: 'normal', watering: false },
-                { name: 'pico4', temp: 31, humidity: 28, activeTime: '600 lx', status: 'wrong', watering: false },
-                { name: 'pico5', temp: 30, humidity: 29, activeTime: '290 lx', status: 'wrong', watering: true },
-                { name: 'pico6', temp: 23, humidity: 50, activeTime: '440 lx', status: 'normal', watering: false },
-                { name: 'pico7', status: 'disconnected' },
-            ] : [
-                { name: 'pico1', temp: 19, humidity: 62, activeTime: '410 lx', status: 'normal', watering: false },
-                { name: 'pico2', temp: 28, humidity: 40, activeTime: '380 lx', status: 'wrong', watering: true },
-                { name: 'pico3', temp: 18, humidity: 65, activeTime: '400 lx', status: 'normal', watering: false },
-                { name: 'pico4', temp: 19, humidity: 61, activeTime: '420 lx', status: 'normal', watering: false },
-                { name: 'pico5', temp: 29, humidity: 38, activeTime: '390 lx', status: 'wrong', watering: false },
-                { name: 'pico6', temp: 20, humidity: 63, activeTime: '430 lx', status: 'normal', watering: false },
-                { name: 'pico7', status: 'disconnected' },
-            ];
-            void mockPicos;
             // Do not present sample values as live sensor measurements.
             setPicos([]);
         } finally {
@@ -360,7 +312,7 @@ export default function ServerDetail() {
                         {/* Pico Cards Grid */}
                         <View style={styles.gridContainer}>
                             {filteredPicos.map((pico, idx) => (
-                                <LargePicoCard key={idx} pico={pico} wide={wide} isDark={isDark} onToggleWatering={toggleWatering} />
+                                <LargePicoCard key={idx} pico={pico} wide={wide} isDark={isDark} />
                             ))}
                             {/* Add pico card */}
                             <Pressable style={{ width: '48%' }}>
@@ -407,7 +359,6 @@ const styles = StyleSheet.create({
     badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
     gaugeTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
     gaugeFill: { height: '100%', borderRadius: 3 },
-    waterBtn: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
     centerAlign: { alignItems: 'center' },
     offlineCircle: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
 });

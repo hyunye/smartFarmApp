@@ -1,312 +1,96 @@
 import { Colors } from '@/constants/Colors';
 import { ServerConfig, useServerAddress } from '@/hooks/useServerAddress';
 import { useTheme } from '@/hooks/useTheme';
-import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View } from 'react-native';
-import Animated, {
-    useAnimatedStyle,
-    useSharedValue,
-    withTiming,
-} from 'react-native-reanimated';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View } from 'react-native';
 
-// ─── Setting Selector Row ─────────────────────────────────────────────────────
+type RuntimeSettings = { measurementIntervalMinutes: number; retentionMonths: number };
 
-function SettingRow({
-    icon, label, sub, value, onToggle, wide, isDark
-}: {
-    icon: keyof typeof Ionicons.glyphMap;
-    label: string;
-    sub?: string;
-    value: boolean;
-    onToggle: () => void;
-    wide: number;
-    isDark: boolean;
-}) {
-    const c = isDark ? Colors.dark : Colors.light;
-    const opacity = useSharedValue(0);
-    useEffect(() => {
-        opacity.value = withTiming(1, { duration: 250 });
-    }, [opacity]);
-    const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
-
-    return (
-        <Animated.View style={[animStyle, {
-            flexDirection: 'row',
-            alignItems: 'center',
-            backgroundColor: c.main.cover,
-            borderRadius: wide * 4,
-            padding: wide * 4,
-            marginBottom: wide * 3,
-            borderWidth: 1,
-            borderColor: c.main.outline,
-        }]}>
-            <View style={{
-                width: wide * 10,
-                height: wide * 10,
-                borderRadius: wide * 2.5,
-                backgroundColor: isDark ? 'rgba(74,222,128,0.1)' : 'rgba(34,197,94,0.1)',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginRight: wide * 3.5,
-            }}>
-                <Ionicons name={icon} size={wide * 5} color={c.accent} />
-            </View>
-            <View style={{ flex: 1 }}>
-                <Text style={{ fontFamily: 'Pretendard-SemiBold', fontSize: wide * 3.5, color: c.main.text }}>{label}</Text>
-                {sub && <Text style={{ fontFamily: 'Pretendard-Regular', fontSize: wide * 2.8, color: c.subText, marginTop: wide * 0.5 }}>{sub}</Text>}
-            </View>
-            <Switch
-                value={value}
-                onValueChange={onToggle}
-                trackColor={{ false: isDark ? '#1E293B' : '#E2E8F0', true: c.accent }}
-                thumbColor={'#FFFFFF'}
-            />
-        </Animated.View>
-    );
-}
-
-function InfoRow({ label, value, wide, c }: { label: string; value: string; wide: number; c: typeof Colors.dark }) {
-    return (
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: wide * 3, borderBottomWidth: 1, borderBottomColor: c.main.outline }}>
-            <Text style={{ fontFamily: 'Pretendard-Regular', fontSize: wide * 3.2, color: c.subText }}>{label}</Text>
-            <Text style={{ fontFamily: 'Pretendard-Medium', fontSize: wide * 3.2, color: c.main.text }}>{value}</Text>
-        </View>
-    );
-}
-
-// ─── Individual Server Configuration Form ──────────────────────────────────────
-
-function ServerConfigFormItem({
-    server,
-    onSave,
-    wide,
-    c
-}: {
-    server: ServerConfig;
-    onSave: (id: string, name: string, description: string, address: string) => void;
-    wide: number;
-    c: typeof Colors.dark;
-}) {
-    const [name, setName] = useState(server.name);
-    const [desc, setDesc] = useState(server.description);
-    const [addr, setAddr] = useState(server.address);
+function ServerRuntimeSettings({ server, wide, c }: { server: ServerConfig; wide: number; c: typeof Colors.dark }) {
+    const [settings, setSettings] = useState<RuntimeSettings>({ measurementIntervalMinutes: 60, retentionMonths: 6 });
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [message, setMessage] = useState('');
+    const baseUrl = server.address.startsWith('http') ? server.address : `http://${server.address}`;
 
     useEffect(() => {
-        setName(server.name);
-        setDesc(server.description);
-        setAddr(server.address);
-    }, [server]);
+        let active = true;
+        fetch(`${baseUrl}/settings`, { headers: { Accept: 'application/json' } })
+            .then(response => response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`)))
+            .then(json => { if (active && json.settings) setSettings(json.settings); })
+            .catch(() => { if (active) setMessage('서버 설정을 불러올 수 없습니다.'); })
+            .finally(() => { if (active) setLoading(false); });
+        return () => { active = false; };
+    }, [baseUrl]);
 
-    const handleSave = () => {
-        onSave(server.id, name.trim(), desc.trim(), addr.trim());
+    const save = async () => {
+        const measurementIntervalMinutes = Number(settings.measurementIntervalMinutes);
+        const retentionMonths = Number(settings.retentionMonths);
+        if (!Number.isInteger(measurementIntervalMinutes) || measurementIntervalMinutes < 1 || measurementIntervalMinutes > 1440 || !Number.isInteger(retentionMonths) || retentionMonths < 1 || retentionMonths > 60) {
+            setMessage('측정 주기는 1~1440분, 보관 기간은 1~60개월로 입력하세요.');
+            return;
+        }
+        setSaving(true); setMessage('');
+        try {
+            const response = await fetch(`${baseUrl}/settings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-API-Key': process.env.EXPO_PUBLIC_SMARTFARM_API_KEY ?? '' },
+                body: JSON.stringify({ measurementIntervalMinutes, retentionMonths }),
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            setMessage('저장되었습니다. 연결된 센서에 새 측정 주기를 전송했습니다.');
+        } catch {
+            setMessage('저장에 실패했습니다. 서버 주소와 API 키를 확인하세요.');
+        } finally { setSaving(false); }
     };
 
-    return (
-        <View style={{
-            paddingVertical: wide * 4,
-            borderBottomWidth: 1,
-            borderBottomColor: c.main.outline,
-            gap: wide * 2.5
-        }}>
-            <Text style={{ fontFamily: 'Pretendard-Bold', fontSize: wide * 3.5, color: c.accent }}>
-                {server.id} 정보 설정
-            </Text>
-
-            {/* Server Name Input */}
-            <View style={styles.inputRow}>
-                <Text style={[styles.inputLabel, { color: c.subText, fontSize: wide * 3.2 }]}>서버 이름</Text>
-                <TextInput
-                    style={[styles.textInput, { color: c.main.text, borderColor: c.main.outline, fontSize: wide * 3.2 }]}
-                    value={name}
-                    onChangeText={setName}
-                    onBlur={handleSave}
-                    onSubmitEditing={handleSave}
-                    placeholder="이름 입력"
-                    placeholderTextColor={c.subText}
-                />
-            </View>
-
-            {/* Description/Location Input */}
-            <View style={styles.inputRow}>
-                <Text style={[styles.inputLabel, { color: c.subText, fontSize: wide * 3.2 }]}>설명/위치</Text>
-                <TextInput
-                    style={[styles.textInput, { color: c.main.text, borderColor: c.main.outline, fontSize: wide * 3.2 }]}
-                    value={desc}
-                    onChangeText={setDesc}
-                    onBlur={handleSave}
-                    onSubmitEditing={handleSave}
-                    placeholder="설명 입력"
-                    placeholderTextColor={c.subText}
-                />
-            </View>
-
-            {/* IP/Address Input */}
-            <View style={styles.inputRow}>
-                <Text style={[styles.inputLabel, { color: c.subText, fontSize: wide * 3.2 }]}>IP 주소/링크</Text>
-                <TextInput
-                    style={[styles.textInput, { color: c.main.text, borderColor: c.main.outline, fontSize: wide * 3.2 }]}
-                    value={addr}
-                    onChangeText={setAddr}
-                    onBlur={handleSave}
-                    onSubmitEditing={handleSave}
-                    placeholder="http://192.168.0.10"
-                    placeholderTextColor={c.subText}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    keyboardType="url"
-                />
-            </View>
-        </View>
-    );
+    return <View style={[styles.card, { backgroundColor: c.main.cover, borderColor: c.main.outline, padding: wide * 4, marginBottom: wide * 3 }]}>
+        <Text style={{ fontFamily: 'Pretendard-Bold', color: c.main.text, fontSize: wide * 4 }}>{server.name}</Text>
+        {loading ? <ActivityIndicator color={c.accent} style={{ marginVertical: wide * 4 }} /> : <>
+            <Text style={[styles.label, { color: c.subText, fontSize: wide * 3 }]}>센서 측정 주기 (분)</Text>
+            <TextInput style={[styles.input, { color: c.main.text, borderColor: c.main.outline }]} value={String(settings.measurementIntervalMinutes)} keyboardType="number-pad" onChangeText={value => setSettings(current => ({ ...current, measurementIntervalMinutes: Number(value) }))} />
+            <Text style={[styles.label, { color: c.subText, fontSize: wide * 3 }]}>측정값 보관 기간 (개월)</Text>
+            <TextInput style={[styles.input, { color: c.main.text, borderColor: c.main.outline }]} value={String(settings.retentionMonths)} keyboardType="number-pad" onChangeText={value => setSettings(current => ({ ...current, retentionMonths: Number(value) }))} />
+            <Pressable onPress={save} disabled={saving} style={[styles.saveButton, { backgroundColor: c.accent, opacity: saving ? 0.6 : 1 }]}>
+                <Text style={styles.saveText}>{saving ? '저장 중...' : '서버 설정 저장'}</Text>
+            </Pressable>
+            {!!message && <Text style={{ color: c.subText, fontFamily: 'Pretendard-Regular', fontSize: wide * 2.7, marginTop: wide * 2 }}>{message}</Text>}
+        </>}
+    </View>;
 }
 
-// ─── Main Settings View ───────────────────────────────────────────────────────
+function ServerAddressForm({ server, wide, c, onSave }: { server: ServerConfig; wide: number; c: typeof Colors.dark; onSave: (id: string, name: string, description: string, address: string) => void }) {
+    const [name, setName] = useState(server.name); const [description, setDescription] = useState(server.description); const [address, setAddress] = useState(server.address);
+    useEffect(() => { setName(server.name); setDescription(server.description); setAddress(server.address); }, [server]);
+    return <View style={{ marginBottom: wide * 3 }}>
+        <Text style={{ color: c.main.text, fontFamily: 'Pretendard-SemiBold', fontSize: wide * 3.5 }}>{server.id}</Text>
+        <TextInput style={[styles.input, { color: c.main.text, borderColor: c.main.outline }]} value={name} onChangeText={setName} placeholder="서버 이름" placeholderTextColor={c.subText} />
+        <TextInput style={[styles.input, { color: c.main.text, borderColor: c.main.outline }]} value={description} onChangeText={setDescription} placeholder="설명" placeholderTextColor={c.subText} />
+        <TextInput style={[styles.input, { color: c.main.text, borderColor: c.main.outline }]} value={address} onChangeText={setAddress} placeholder="http://192.168.0.10:3000" placeholderTextColor={c.subText} autoCapitalize="none" />
+        <Pressable style={[styles.saveButton, { backgroundColor: c.accent }]} onPress={() => onSave(server.id, name.trim(), description.trim(), address.trim().replace(/\/$/, ''))}><Text style={styles.saveText}>서버 주소 저장</Text></Pressable>
+    </View>;
+}
 
 export default function Settings() {
-    const { width, height } = useWindowDimensions();
-    const wide = Math.min(width, height) * 0.01;
-    const { isDark, toggleTheme } = useTheme();
-    const c = isDark ? Colors.dark : Colors.light;
-
+    const { width, height } = useWindowDimensions(); const wide = Math.min(width, height) * 0.01;
+    const { isDark, toggleTheme } = useTheme(); const c = isDark ? Colors.dark : Colors.light;
     const { servers, updateServerConfig } = useServerAddress();
-
     const [notifications, setNotifications] = useState(true);
-    const [autoWater, setAutoWater] = useState(true);
-    const [autoLight, setAutoLight] = useState(false);
-
-    const titleOpacity = useSharedValue(0);
-    useEffect(() => { titleOpacity.value = withTiming(1, { duration: 500 }); }, [titleOpacity]);
-    const titleStyle = useAnimatedStyle(() => ({ opacity: titleOpacity.value }));
-
-    const handleServerSave = (id: string, name: string, description: string, address: string) => {
-        const cleanedAddress = address.replace(/\/$/, ''); // Remove trailing slash
-        updateServerConfig(id, name, description, cleanedAddress);
-    };
-
-    return (
-        <ScrollView
-            style={{ flex: 1, backgroundColor: c.background }}
-            contentContainerStyle={{ paddingBottom: wide * 22, paddingTop: wide * 4 }}
-            showsVerticalScrollIndicator={false}
-        >
-            <Animated.View style={[titleStyle, { paddingHorizontal: wide * 5, marginBottom: wide * 6 }]}>
-                <Text style={{ fontFamily: 'Pretendard-ExtraLight', fontSize: wide * 3.5, color: c.subText }}>스마트팜</Text>
-                <Text style={{ fontFamily: 'Pretendard-Bold', fontSize: wide * 7, color: c.main.text }}>설정</Text>
-                <View style={{ width: wide * 8, height: wide * 0.8, borderRadius: wide, backgroundColor: c.accent, marginTop: wide * 1.5 }} />
-            </Animated.View>
-
-            <View style={{ paddingHorizontal: wide * 5 }}>
-                {/* Appearance */}
-                <Text style={{ fontFamily: 'Pretendard-SemiBold', fontSize: wide * 3.5, color: c.subText, marginBottom: wide * 3, textTransform: 'uppercase', letterSpacing: 1 }}>
-                    화면
-                </Text>
-                <SettingRow
-                    icon="moon-outline"
-                    label="다크 모드"
-                    sub="눈의 피로를 줄여줍니다"
-                    value={isDark}
-                    onToggle={toggleTheme}
-                    wide={wide}
-                    isDark={isDark}
-                />
-
-                {/* Automation */}
-                <Text style={{ fontFamily: 'Pretendard-SemiBold', fontSize: wide * 3.5, color: c.subText, marginBottom: wide * 3, marginTop: wide * 2, textTransform: 'uppercase', letterSpacing: 1 }}>
-                    자동화
-                </Text>
-                <SettingRow
-                    icon="water-outline"
-                    label="자동 관수"
-                    sub="토양 수분 30% 이하 시 자동 관수"
-                    value={autoWater}
-                    onToggle={() => setAutoWater(v => !v)}
-                    wide={wide}
-                    isDark={isDark}
-                />
-                <SettingRow
-                    icon="sunny-outline"
-                    label="자동 조명"
-                    sub="일조량에 따라 보조 조명 제어"
-                    value={autoLight}
-                    onToggle={() => setAutoLight(v => !v)}
-                    wide={wide}
-                    isDark={isDark}
-                />
-
-                {/* Notifications */}
-                <Text style={{ fontFamily: 'Pretendard-SemiBold', fontSize: wide * 3.5, color: c.subText, marginBottom: wide * 3, marginTop: wide * 2, textTransform: 'uppercase', letterSpacing: 1 }}>
-                    알림
-                </Text>
-                <SettingRow
-                    icon="notifications-outline"
-                    label="푸시 알림"
-                    sub="이상 상황 발생 시 알림 전송"
-                    value={notifications}
-                    onToggle={() => setNotifications(v => !v)}
-                    wide={wide}
-                    isDark={isDark}
-                />
-
-                {/* Server configurations */}
-                <Text style={{ fontFamily: 'Pretendard-SemiBold', fontSize: wide * 3.5, color: c.subText, marginBottom: wide * 3, marginTop: wide * 2, textTransform: 'uppercase', letterSpacing: 1 }}>
-                    서버 연결 관리
-                </Text>
-                <View style={{
-                    backgroundColor: c.main.cover,
-                    borderRadius: wide * 4,
-                    paddingHorizontal: wide * 4,
-                    paddingBottom: wide * 2,
-                    borderWidth: 1,
-                    borderColor: c.main.outline,
-                    marginBottom: wide * 6
-                }}>
-                    {servers.map((srv) => (
-                        <ServerConfigFormItem
-                            key={srv.id}
-                            server={srv}
-                            onSave={handleServerSave}
-                            wide={wide}
-                            c={c}
-                        />
-                    ))}
-                </View>
-
-                {/* About info */}
-                <Text style={{ fontFamily: 'Pretendard-SemiBold', fontSize: wide * 3.5, color: c.subText, marginBottom: wide * 3, textTransform: 'uppercase', letterSpacing: 1 }}>
-                    앱 정보
-                </Text>
-                <View style={{ backgroundColor: c.main.cover, borderRadius: wide * 4, padding: wide * 4, borderWidth: 1, borderColor: c.main.outline }}>
-                    <InfoRow label="앱 버전" value="1.0.0" wide={wide} c={isDark ? Colors.dark : Colors.light} />
-                    <InfoRow label="MQTT 포트" value="1883" wide={wide} c={isDark ? Colors.dark : Colors.light} />
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: wide * 3 }}>
-                        <Text style={{ fontFamily: 'Pretendard-Regular', fontSize: wide * 3.2, color: c.subText }}>개발팀</Text>
-                        <Text style={{ fontFamily: 'Pretendard-Medium', fontSize: wide * 3.2, color: c.accent }}>ITEC</Text>
-                    </View>
-                </View>
-            </View>
-        </ScrollView>
-    );
+    return <ScrollView style={{ flex: 1, backgroundColor: c.background }} contentContainerStyle={{ padding: wide * 5, paddingBottom: wide * 22 }}>
+        <Text style={{ fontFamily: 'Pretendard-Bold', fontSize: wide * 7, color: c.main.text, marginBottom: wide * 5 }}>설정</Text>
+        <View style={[styles.card, { backgroundColor: c.main.cover, borderColor: c.main.outline, padding: wide * 4 }]}>
+            <Text style={{ color: c.main.text, fontFamily: 'Pretendard-SemiBold', fontSize: wide * 3.5 }}>다크 모드</Text><Switch value={isDark} onValueChange={toggleTheme} trackColor={{ true: c.accent }} />
+            <Text style={{ color: c.main.text, fontFamily: 'Pretendard-SemiBold', fontSize: wide * 3.5, marginTop: wide * 3 }}>알림 표시</Text><Switch value={notifications} onValueChange={setNotifications} trackColor={{ true: c.accent }} />
+        </View>
+        <Text style={[styles.heading, { color: c.subText, marginTop: wide * 5 }]}>센서 및 데이터 보관</Text>
+        {servers.map(server => <ServerRuntimeSettings key={server.id} server={server} wide={wide} c={c} />)}
+        <Text style={[styles.heading, { color: c.subText, marginTop: wide * 3 }]}>서버 연결</Text>
+        <View style={[styles.card, { backgroundColor: c.main.cover, borderColor: c.main.outline, padding: wide * 4 }]}>{servers.map(server => <ServerAddressForm key={server.id} server={server} wide={wide} c={c} onSave={updateServerConfig} />)}</View>
+    </ScrollView>;
 }
 
 const styles = StyleSheet.create({
-    inputRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-    },
-    inputLabel: {
-        fontFamily: 'Pretendard-Regular',
-        flexShrink: 0,
-        width: 90,
-    },
-    textInput: {
-        flex: 1,
-        fontFamily: 'Pretendard-Medium',
-        paddingVertical: 5,
-        paddingHorizontal: 8,
-        borderWidth: 1,
-        borderRadius: 8,
-        textAlign: 'right',
-    },
+    card: { borderWidth: 1, borderRadius: 16, marginBottom: 12 }, heading: { fontFamily: 'Pretendard-SemiBold', fontSize: 14, marginBottom: 10 },
+    label: { fontFamily: 'Pretendard-Regular', marginTop: 12, marginBottom: 5 }, input: { fontFamily: 'Pretendard-Medium', borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 },
+    saveButton: { alignItems: 'center', borderRadius: 8, paddingVertical: 10, marginTop: 12 }, saveText: { color: '#FFFFFF', fontFamily: 'Pretendard-Bold' },
 });
