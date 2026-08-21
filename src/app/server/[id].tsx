@@ -1,6 +1,7 @@
 import { Colors } from '@/constants/Colors';
 import { useServerAddress } from '@/hooks/useServerAddress';
 import { useTheme } from '@/hooks/useTheme';
+import { loadServerSnapshot, saveServerSnapshot } from '@/utils/localData';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -200,10 +201,16 @@ export default function ServerDetail() {
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const json: Respond = await res.json();
             setPicos((json.pico ?? []).map(normalizePico));
+            void saveServerSnapshot(serverConfig.id, json);
         } catch (e: any) {
             setError(e?.message ?? '서버 연결에 실패했습니다');
-            // Do not present sample values as live sensor measurements.
-            setPicos([]);
+            const cached = await loadServerSnapshot<Respond>(serverConfig.id);
+            if (cached) {
+                setPicos((cached.state.pico ?? []).map(normalizePico));
+                setError(`서버 연결에 실패했습니다. 휴대폰에 저장된 ${new Date(cached.savedAt).toLocaleString('ko-KR')} 데이터입니다.`);
+            } else {
+                setPicos([]);
+            }
         } finally {
             setLoading(false);
             setRefreshing(false);

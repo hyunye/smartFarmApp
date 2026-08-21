@@ -1,6 +1,7 @@
 import { Colors } from '@/constants/Colors';
 import { useServerAddress } from '@/hooks/useServerAddress';
 import { useTheme } from '@/hooks/useTheme';
+import { loadServerSnapshot, saveServerSnapshot } from '@/utils/localData';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -290,6 +291,7 @@ export default function Index() {
                     });
                     if (!res.ok) throw new Error('Network error');
                     const data = await res.json();
+                    void saveServerSnapshot(srv.id, data);
 
                     const picosList: Pico[] = (data.pico || []).map((p: any) => {
                         let status: PicoStatus = 'normal';
@@ -316,12 +318,20 @@ export default function Index() {
                         address: srv.address,
                     };
                 } catch {
+                    const cached = await loadServerSnapshot<{ pico?: any[] }>(srv.id);
+                    const picosList: Pico[] = (cached?.state.pico ?? []).map((p: any) => ({
+                        name: p.name || p.id,
+                        temp: p.state?.temperature,
+                        humidity: p.state?.moisture,
+                        activeTime: `${p.state?.light ?? 0} lx`,
+                        status: !p.connected ? 'disconnected' : (p.state?.temperature > 30 || p.state?.temperature < 15 || p.state?.moisture < 30) ? 'wrong' : 'normal',
+                    }));
                     return {
                         id: srv.id,
                         name: srv.name,
                         location: srv.description,
-                        // Never display fabricated sensor data as though it were live.
-                        picos: [],
+                        // Only previously synchronized values are available offline.
+                        picos: picosList,
                         error: true,
                         address: srv.address,
                     };
